@@ -109,18 +109,18 @@ func (consumer *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession
 			slog.Debug("Message claimed", "topic", claim.Topic(), "partition", claim.Partition(), "offset", message.Offset, "value", string(message.Value))
 			var dataChangedMessage DataChangedMessage
 			if err := json.Unmarshal(message.Value, &dataChangedMessage); err != nil {
-				return fmt.Errorf("Failed to unmarshal message, value=%s, err: %w", message.Value, err)
+				return fmt.Errorf("Failed to unmarshal message, offset=%d, value=%s, err: %w", message.Offset, message.Value, err)
 			}
 			var err error
-			switch dataChangedMessage.Payload.Op {
+			switch dataChangedMessage.Op {
 			case "r", "c":
-				err = consumer.onInsert(*dataChangedMessage.Payload.After)
+				err = consumer.onInsert(*dataChangedMessage.After)
 			case "u":
-				err = consumer.onUpdate(*dataChangedMessage.Payload.Before, *dataChangedMessage.Payload.After)
+				err = consumer.onUpdate(*dataChangedMessage.Before, *dataChangedMessage.After)
 			case "d":
-				err = consumer.onDelete(*dataChangedMessage.Payload.Before)
+				err = consumer.onDelete(*dataChangedMessage.Before)
 			default:
-				err = fmt.Errorf("Unknown op, op=%s, value=%s", dataChangedMessage.Payload.Op, message.Value)
+				err = fmt.Errorf("Unknown op, op=%s, value=%s", dataChangedMessage.Op, message.Value)
 			}
 			if err != nil {
 				return err
@@ -135,11 +135,9 @@ func (consumer *saramaConsumer) ConsumeClaim(session sarama.ConsumerGroupSession
 }
 
 type DataChangedMessage struct {
-	Payload struct {
-		Op     string `json:"op"`
-		Before *Order `json:"before"`
-		After  *Order `json:"after"`
-	} `json:"payload"`
+	Op     string `json:"op"`
+	Before *Order `json:"before"`
+	After  *Order `json:"after"`
 }
 
 type Order struct {

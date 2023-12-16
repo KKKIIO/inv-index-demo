@@ -10,6 +10,8 @@ curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" 
         "database.dbname" : "postgres",
         "topic.prefix": "postgres-0",
         "table.include.list": "public.orders",
+        "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter": "org.apache.kafka.connect.json.JsonConverter",
         "key.converter.schemas.enable": "false",
         "value.converter.schemas.enable": "false"
     }
