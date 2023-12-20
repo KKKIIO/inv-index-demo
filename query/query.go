@@ -4,8 +4,8 @@ import (
 	"log/slog"
 	"slices"
 
-	"github.com/KKKIIO/inv-index-pg/index"
-	"github.com/KKKIIO/inv-index-pg/store"
+	"github.com/KKKIIO/inv-index-demo/index"
+	"github.com/KKKIIO/inv-index-demo/store"
 	"github.com/RoaringBitmap/roaring"
 )
 
@@ -182,7 +182,7 @@ func (r *SparseU64IndexReader) Scan(baseBm *roaring.Bitmap, reverse bool, proc f
 			if sortedBm.Bitmap.GetCardinality() == 0 {
 				continue
 			}
-			sortedIds, err := index.QuerySortedIds(r.FvStore, indexKey, sortedBm.Bitmap)
+			sortedIds, err := index.QuerySortIds(r.FvStore, indexKey, sortedBm.Bitmap)
 			if err != nil {
 				return err
 			}

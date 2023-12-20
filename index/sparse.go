@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/KKKIIO/inv-index-pg/store"
+	"github.com/KKKIIO/inv-index-demo/store"
 	"github.com/RoaringBitmap/roaring"
 )
 
@@ -17,7 +17,7 @@ func (i SparseIndex) MakeIndexKey() string {
 	return fmt.Sprintf("sparse:%s:%s", i.TableName, i.FieldName)
 }
 
-func QuerySortedIds(fvStore *store.RedisFvStore, fieldKey string, bm *roaring.Bitmap) ([]SortedId, error) {
+func QuerySortIds(fvStore *store.RedisFvStore, fieldKey string, bm *roaring.Bitmap) ([]SortId, error) {
 	ids := make([]uint32, 0)
 	for it := bm.Iterator(); it.HasNext(); {
 		ids = append(ids, it.Next())
@@ -26,15 +26,20 @@ func QuerySortedIds(fvStore *store.RedisFvStore, fieldKey string, bm *roaring.Bi
 	if err != nil {
 		return nil, err
 	}
-	sortIds := make([]SortedId, len(ids))
+	sortIds := make([]SortId, len(ids))
 	for i, id := range ids {
-		sortIds[i] = SortedId{Id: id, Score: fvs[i]}
+		sortIds[i] = SortId{Id: id, SortKey: fvs[i]}
 	}
-	sort.Slice(sortIds, func(i, j int) bool { return sortIds[i].Score < sortIds[j].Score })
+	sort.Slice(sortIds, func(i, j int) bool {
+		if sortIds[i].SortKey == sortIds[j].SortKey { // order by id if sort key is the same for better stability
+			return sortIds[i].Id < sortIds[j].Id
+		}
+		return sortIds[i].SortKey < sortIds[j].SortKey
+	})
 	return sortIds, nil
 }
 
-type SortedId struct {
-	Id    uint32
-	Score uint64
+type SortId struct {
+	Id      uint32
+	SortKey uint64
 }

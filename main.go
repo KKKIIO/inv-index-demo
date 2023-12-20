@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/KKKIIO/inv-index-pg/query"
-	"github.com/KKKIIO/inv-index-pg/store"
-	"github.com/KKKIIO/inv-index-pg/sync"
+	"github.com/KKKIIO/inv-index-demo/query"
+	"github.com/KKKIIO/inv-index-demo/store"
+	"github.com/KKKIIO/inv-index-demo/sync"
 	"github.com/gin-gonic/gin"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/redis/go-redis/v9"

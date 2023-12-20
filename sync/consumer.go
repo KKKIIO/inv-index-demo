@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/KKKIIO/inv-index-pg/index"
-	"github.com/KKKIIO/inv-index-pg/store"
+	"github.com/KKKIIO/inv-index-demo/index"
+	"github.com/KKKIIO/inv-index-demo/store"
 	"github.com/RoaringBitmap/roaring"
 )
 
@@ -26,7 +27,7 @@ type Consumer struct {
 
 func NewConsumer(config Config) (*Consumer, error) {
 	kafkaConfig := sarama.NewConfig()
-	kafkaConfig.ClientID = "inv-index-pg-sync"
+	kafkaConfig.ClientID = "inv-index-demo-sync"
 	kafkaConfig.Consumer.Offsets.Initial = sarama.OffsetOldest
 	client, err := sarama.NewConsumerGroup(config.Brokers, config.ConsumerGroup, kafkaConfig)
 	if err != nil {
@@ -273,25 +274,38 @@ func (w *SparseU64IndexWriter) Add(bmStore *store.RedisSortKeyBitmapStore, fvSto
 	} else if floorSortedBm.Bitmap.GetCardinality() < uint64(w.SplitThreshold) {
 		updateSortedBms = []store.SortKeyBitmap{*floorSortedBm}
 	} else {
-		// sort ids by fv, split ids into 2 parts
-		sortedIds, err := index.QuerySortedIds(fvStore, fieldKey, floorSortedBm.Bitmap)
+		// sort ids and split into 2 parts
+		sortIds, err := index.QuerySortIds(fvStore, fieldKey, floorSortedBm.Bitmap)
 		if err != nil {
 			return err
 		}
-		bm1 := floorSortedBm.Bitmap
-		bm1.Clear()
-		mid := len(sortedIds) / 2
-		for _, sortId := range sortedIds[:mid] {
-			bm1.Add(sortId.Id)
-		}
-		bm2 := roaring.New()
-		for _, sortId := range sortedIds[mid:] {
-			bm2.Add(sortId.Id)
-		}
-		updateSortedBms = []store.SortKeyBitmap{{SortKey: sortedIds[0].Score, Bitmap: bm1}, {SortKey: sortedIds[mid].Score, Bitmap: bm2}}
-		// make first sorted bitmap the floor sorted bitmap
-		if updateSortedBms[1].SortKey <= fv {
-			updateSortedBms[0], updateSortedBms[1] = updateSortedBms[1], updateSortedBms[0]
+		if sortIds[0].SortKey == sortIds[len(sortIds)-1].SortKey {
+			// TODO: detect degraded sparse index earlier
+			updateSortedBms = []store.SortKeyBitmap{*floorSortedBm}
+		} else {
+			// split to (-inf, midKey], (midKey, +inf)
+			midKey := sortIds[len(sortIds)/2].SortKey
+			if midKey == sortIds[len(sortIds)-1].SortKey {
+				midKey -= 1 // make sure the second bitmap is not empty
+			}
+			mid := sort.Search(len(sortIds), func(i int) bool { return sortIds[i].SortKey > midKey })
+			if mid == 0 {
+				panic(fmt.Errorf("mid == 0, sortIds=%+v", sortIds))
+			}
+			bm1 := floorSortedBm.Bitmap
+			bm1.Clear()
+			for _, sortId := range sortIds[:mid] {
+				bm1.Add(sortId.Id)
+			}
+			bm2 := roaring.New()
+			for _, sortId := range sortIds[mid:] {
+				bm2.Add(sortId.Id)
+			}
+			updateSortedBms = []store.SortKeyBitmap{{SortKey: sortIds[0].SortKey, Bitmap: bm1}, {SortKey: sortIds[mid].SortKey, Bitmap: bm2}}
+			// make first sorted bitmap the floor sorted bitmap
+			if updateSortedBms[1].SortKey <= fv {
+				updateSortedBms[0], updateSortedBms[1] = updateSortedBms[1], updateSortedBms[0]
+			}
 		}
 	}
 	updateSortedBms[0].Bitmap.Add(id)

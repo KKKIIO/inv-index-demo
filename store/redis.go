@@ -23,13 +23,13 @@ func (s *RedisBmStore) Get(indexKey string, valueKey string) (*roaring.Bitmap, e
 	return parseBitmap(value)
 }
 
-func (s *RedisBmStore) Set(indexKey string, valueKey string, value *roaring.Bitmap) error {
+func (s *RedisBmStore) Set(indexKey string, valueKey string, bitmap *roaring.Bitmap) error {
 	hashKey := s.Prefix + indexKey
 	// delete empty bitmaps, update non-empty bitmaps
-	if value == nil || value.GetCardinality() == 0 {
+	if bitmap == nil || bitmap.GetCardinality() == 0 {
 		return s.RDB.HDel(context.Background(), hashKey, valueKey).Err()
 	}
-	raw, err := value.ToBytes()
+	raw, err := bitmap.ToBytes()
 	if err != nil {
 		return err
 	}
