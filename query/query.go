@@ -123,9 +123,14 @@ func (s *OrdersSearchService) List(r Request) (*Response, error) {
 		return &resp, nil
 	}
 	resultIds := make([]uint32, 0)
-	if err := s.CreateTimeIndexReader.Scan(accBm, true, func(id uint32) bool {
-		resultIds = append(resultIds, id)
-		return r.Limit == nil || len(resultIds) < *r.Limit
+	if err := s.CreateTimeIndexReader.Scan(accBm, true, func(sortedIds []index.SortId) bool {
+		for _, sortId := range sortedIds {
+			resultIds = append(resultIds, sortId.Id)
+			if r.Limit != nil && len(resultIds) >= *r.Limit {
+				return false
+			}
+		}
+		return true
 	}); err != nil {
 		return nil, err
 	}
@@ -139,13 +144,7 @@ type TermIndexReader[T index.Term] struct {
 }
 
 func (r *TermIndexReader[T]) Get(fv T) (*roaring.Bitmap, error) {
-	indexKey := r.Index.GetIndexKey()
-	key := r.Index.MakeValueKey(fv)
-	bm, err := r.BmStore.Get(indexKey, key)
-	if err != nil {
-		return nil, err
-	}
-	return bm, nil
+	return r.BmStore.Get(r.Index.GetIndexKey(), r.Index.MakeValueKey(fv))
 }
 
 type SparseU64IndexReader struct {
@@ -154,8 +153,8 @@ type SparseU64IndexReader struct {
 	FvStore *store.RedisFvStore
 }
 
-func (r *SparseU64IndexReader) Scan(baseBm *roaring.Bitmap, reverse bool, proc func(uint32) bool) error {
-	// scan bitmaps, sort by fv and process
+func (r *SparseU64IndexReader) Scan(baseBm *roaring.Bitmap, reverse bool, proc func([]index.SortId) bool) error {
+	// scan bitmaps, sort by fv
 	start, end := uint64(0), uint64(0xFFFFFFFFFFFFFFFF)
 	if reverse {
 		start, end = end, start
@@ -189,10 +188,8 @@ func (r *SparseU64IndexReader) Scan(baseBm *roaring.Bitmap, reverse bool, proc f
 			if reverse {
 				slices.Reverse(sortedIds)
 			}
-			for _, id := range sortedIds {
-				if !proc(id.Id) {
-					return nil
-				}
+			if !proc(sortedIds) {
+				return nil
 			}
 		}
 	}
